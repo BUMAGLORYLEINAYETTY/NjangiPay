@@ -1,0 +1,25 @@
+name: njangi_pay
+description: A modern Tontine/Njangi savings app
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^5.1.0
+  cupertino_icons: ^1.0.6
+  provider: ^6.0.5
+  shared_preferences: ^2.2.2
+  dio: ^5.3.2
+  fl_chart: ^0.65.0
+  qr_flutter: ^4.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

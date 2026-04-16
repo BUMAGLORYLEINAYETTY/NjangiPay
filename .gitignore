@@ -1,0 +1,52 @@
+# Flutter/Dart
+.dart_tool/
+.pub/
+.pub-cache/
+build/
+flutter_*.png
+*.lock
+*.pid
+*.log
+*.iml
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/.cxx/
+android/app/build/
+android/app/*.iml
+
+# iOS
+ios/.symlinks/
+ios/Pods/
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+
+# macOS
+macos/Flutter/Flutter.podspec
+macos/Flutter/Generated.xcconfig
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+*.key
+*.pem
+
+# Web
+web/index.html.bak
+web/icons/
+
+# Temporary files
+.DS_Store
+*.tmp
+*.swp
+
+# Coverage
+coverage/
