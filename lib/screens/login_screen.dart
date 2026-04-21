@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
 
@@ -14,7 +15,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
   bool _obscurePassword = true;
 
   @override
@@ -31,20 +31,23 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       return;
     }
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 1));
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isLoggedIn', true);
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+
+    final auth = context.read<AuthProvider>();
+    final success = await auth.login(_emailController.text.trim(), _passwordController.text);
+
+    if (success && mounted) {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(auth.error ?? 'Login failed'), backgroundColor: Colors.red),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isLoading = context.watch<AuthProvider>().isLoading;
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -71,27 +74,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 36),
-              Text(
-                'Welcome Back',
-                style: GoogleFonts.poppins(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1E3A8A),
-                ),
-              ),
+              Text('Welcome Back',
+                  style: GoogleFonts.poppins(
+                      fontSize: 30, fontWeight: FontWeight.bold, color: const Color(0xFF1E3A8A))),
               const SizedBox(height: 6),
-              Text(
-                'Sign in to continue to NjangiPay',
-                style: GoogleFonts.inter(fontSize: 15, color: Colors.grey[600]),
-              ),
+              Text('Sign in to continue to NjangiPay',
+                  style: GoogleFonts.inter(fontSize: 15, color: Colors.grey[600])),
               const SizedBox(height: 36),
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
-                  labelText: 'Email Address',
-                  prefixIcon: Icon(Icons.email_outlined),
-                ),
+                    labelText: 'Email Address', prefixIcon: Icon(Icons.email_outlined)),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -106,49 +100,34 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {},
-                  child: const Text(
-                    'Forgot Password?',
-                    style: TextStyle(color: Color(0xFF1E3A8A)),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _isLoading ? null : _login,
+                onPressed: isLoading ? null : _login,
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 54),
                   backgroundColor: const Color(0xFF1E3A8A),
                   foregroundColor: Colors.white,
                 ),
-                child: _isLoading
+                child: isLoading
                     ? const SizedBox(
                         height: 22,
                         width: 22,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                      )
-                    : Text(
-                        'Sign In',
-                        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                    : Text('Sign In',
+                        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),
               ),
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text("Don't have an account? ", style: GoogleFonts.inter(color: Colors.grey[600])),
+                  Text("Don't have an account? ",
+                      style: GoogleFonts.inter(color: Colors.grey[600])),
                   TextButton(
                     onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                    ),
-                    child: const Text(
-                      'Sign Up',
-                      style: TextStyle(color: Color(0xFF1E3A8A), fontWeight: FontWeight.bold),
-                    ),
+                        context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
+                    child: const Text('Sign Up',
+                        style: TextStyle(
+                            color: Color(0xFF1E3A8A), fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),

@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  fullName      String
+  email         String   @unique
+  phone         String   @unique
+  passwordHash  String
+  trustScore    Int      @default(100)
+  isVerified    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  memberships   GroupMember[]
+  transactions  Transaction[]
+  payouts       Payout[]
+}
+
+model Group {
+  id              String      @id @default(uuid())
+  name            String
+  description     String?
+  contributionAmt Float
+  frequency       Frequency
+  maxMembers      Int
+  startDate       DateTime
+  status          GroupStatus @default(PENDING)
+  inviteCode      String      @unique
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  members         GroupMember[]
+  transactions    Transaction[]
+  payouts         Payout[]
+}
+
+model GroupMember {
+  id          String     @id @default(uuid())
+  userId      String
+  groupId     String
+  role        MemberRole @default(MEMBER)
+  payoutOrder Int?
+  joinedAt    DateTime   @default(now())
+
+  user        User  @relation(fields: [userId], references: [id])
+  group       Group @relation(fields: [groupId], references: [id])
+
+  @@unique([userId, groupId])
+}
+
+model Transaction {
+  id          String            @id @default(uuid())
+  userId      String
+  groupId     String
+  amount      Float
+  type        TransactionType
+  status      TransactionStatus @default(PENDING)
+  reference   String            @unique @default(uuid())
+  note        String?
+  createdAt   DateTime          @default(now())
+
+  user        User  @relation(fields: [userId], references: [id])
+  group       Group @relation(fields: [groupId], references: [id])
+}
+
+model Payout {
+  id          String       @id @default(uuid())
+  userId      String
+  groupId     String
+  amount      Float
+  status      PayoutStatus @default(PENDING)
+  scheduledAt DateTime
+  paidAt      DateTime?
+  createdAt   DateTime     @default(now())
+
+  user        User  @relation(fields: [userId], references: [id])
+  group       Group @relation(fields: [groupId], references: [id])
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum GroupStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum MemberRole {
+  ADMIN
+  MEMBER
+}
+
+enum TransactionType {
+  CONTRIBUTION
+  PAYOUT
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  SKIPPED
+}

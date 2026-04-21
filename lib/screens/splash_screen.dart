@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/storage_service.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
 
@@ -20,14 +20,11 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _navigate() async {
     await Future.delayed(const Duration(seconds: 2));
-    final prefs = await SharedPreferences.getInstance();
-    final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+    final loggedIn = await StorageService.isLoggedIn();
     if (mounted) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => isLoggedIn ? const HomeScreen() : const LoginScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => loggedIn ? const HomeScreen() : const LoginScreen()),
       );
     }
   }
@@ -53,33 +50,21 @@ class _SplashScreenState extends State<SplashScreen> {
                   color: Colors.white,
                   shape: BoxShape.circle,
                   boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 20,
-                      spreadRadius: 5,
-                    ),
+                    BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 20, spreadRadius: 5),
                   ],
                 ),
                 child: const Icon(Icons.groups, size: 80, color: Color(0xFF1E3A8A)),
               ),
               const SizedBox(height: 32),
-              Text(
-                'NjangiPay',
-                style: GoogleFonts.poppins(
-                  fontSize: 48,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
+              Text('NjangiPay',
+                  style: GoogleFonts.poppins(
+                      fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white)),
               const SizedBox(height: 8),
-              Text(
-                'Smart Rotating Savings',
-                style: GoogleFonts.inter(fontSize: 18, color: Colors.white70),
-              ),
+              Text('Smart Rotating Savings',
+                  style: GoogleFonts.inter(fontSize: 18, color: Colors.white70)),
               const SizedBox(height: 80),
               const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
             ],
           ),
         ),

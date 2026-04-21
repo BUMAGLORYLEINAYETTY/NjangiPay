@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../providers/auth_provider.dart';
+import '../providers/group_provider.dart';
+import '../providers/transaction_provider.dart';
+import '../models/group_model.dart';
+import '../models/transaction_model.dart';
 import 'login_screen.dart';
+import 'create_group_screen.dart';
+import 'join_group_screen.dart';
+import 'group_details_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _screens[_selectedIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.group_outlined), selectedIcon: Icon(Icons.group), label: 'Groups'),
@@ -38,297 +47,448 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ─── DASHBOARD TAB ────────────────────────────────────────────────────────────
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
-class DashboardTab extends StatelessWidget {
+class DashboardTab extends StatefulWidget {
   const DashboardTab({super.key});
 
   @override
+  State<DashboardTab> createState() => _DashboardTabState();
+}
+
+class _DashboardTabState extends State<DashboardTab> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<TransactionProvider>().fetchSummary();
+      context.read<GroupProvider>().fetchGroups();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    final summaryProvider = context.watch<TransactionProvider>();
+    final groupProvider = context.watch<GroupProvider>();
+    final summary = summaryProvider.summary;
+    final fmt = NumberFormat('#,##0', 'en_US');
+
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            _buildHeader(),
-            const SizedBox(height: 24),
-            _buildBalanceCard(),
-            const SizedBox(height: 28),
-            _buildQuickActions(context),
-            const SizedBox(height: 28),
-            _buildSectionHeader('Active Njangi Groups'),
-            const SizedBox(height: 12),
-            _buildGroupList(),
-            const SizedBox(height: 28),
-            _buildSectionHeader('Recent Transactions'),
-            const SizedBox(height: 12),
-            _buildTransactionList(),
-          ],
+      child: RefreshIndicator(
+        onRefresh: () async {
+          await context.read<TransactionProvider>().fetchSummary();
+          await context.read<GroupProvider>().fetchGroups();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Good morning,', style: GoogleFonts.inter(color: Colors.grey[600], fontSize: 14)),
+                      Text('${user?.fullName ?? 'User'} 👋',
+                          style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFF1E3A8A))),
+                    ],
+                  ),
+                  CircleAvatar(
+                    radius: 26,
+                    backgroundColor: const Color(0xFF1E3A8A),
+                    child: Text(
+                      user?.fullName.substring(0, 1).toUpperCase() ?? 'U',
+                      style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Balance card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1E3A8A).withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: summaryProvider.isLoading
+                    ? const SizedBox(
+                        height: 100,
+                        child: Center(child: CircularProgressIndicator(color: Colors.white)))
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Total Contributed', style: GoogleFonts.inter(color: Colors.white60, fontSize: 14)),
+                          const SizedBox(height: 8),
+                          Text('XAF ${fmt.format(summary?.totalContributed ?? 0)}',
+                              style: GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+                          const SizedBox(height: 16),
+                          const Divider(color: Colors.white24),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _statItem('Active Groups', '${summary?.activeGroups ?? 0}'),
+                              _statItem('Total Received', 'XAF ${fmt.format(summary?.totalReceived ?? 0)}'),
+                              _statItem('Trust Score', '${user?.trustScore ?? 100}%'),
+                            ],
+                          ),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 28),
+
+              // Quick actions
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _actionButton(Icons.add_circle_outline, 'New Group', const Color(0xFF1E3A8A), () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateGroupScreen()))
+                        .then((_) {
+                      context.read<GroupProvider>().fetchGroups();
+                      context.read<TransactionProvider>().fetchSummary();
+                    });
+                  }),
+                  _actionButton(Icons.group_add_outlined, 'Join Group', const Color(0xFF10B981), () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const JoinGroupScreen()))
+                        .then((_) => context.read<GroupProvider>().fetchGroups());
+                  }),
+                  _actionButton(Icons.receipt_long_outlined, 'History', const Color(0xFFF59E0B), () {}),
+                  _actionButton(Icons.person_outline, 'Profile', const Color(0xFF8B5CF6), () {}),
+                ],
+              ),
+              const SizedBox(height: 28),
+
+              // Groups
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('My Groups', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+                  TextButton(onPressed: () {}, child: const Text('See All')),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (groupProvider.isLoading)
+                const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+              else if (groupProvider.groups.isEmpty)
+                _emptyState(Icons.group_outlined, 'No groups yet', 'Create or join a Njangi group')
+              else
+                ...groupProvider.groups.take(3).map((g) => _groupCard(context, g)),
+
+              const SizedBox(height: 28),
+
+              // Recent transactions
+              Text('Recent Transactions', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              if (summary == null || summary.recentTransactions.isEmpty)
+                _emptyState(Icons.receipt_outlined, 'No transactions yet', 'Contributions will appear here')
+              else
+                ...summary.recentTransactions.map((t) => _transactionCard(t, fmt)),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _statItem(String label, String value) {
+    return Column(
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Good morning,', style: GoogleFonts.inter(color: Colors.grey[600], fontSize: 14)),
-            Text(
-              'John Doe 👋',
-              style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFF1E3A8A)),
-            ),
-          ],
-        ),
-        Stack(
-          children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: const Color(0xFF1E3A8A),
-              child: const Icon(Icons.person, size: 28, color: Colors.white),
-            ),
-            Positioned(
-              right: 0,
-              top: 0,
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-              ),
-            ),
-          ],
-        ),
+        Text(value, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text(label, style: GoogleFonts.inter(color: Colors.white60, fontSize: 10)),
       ],
     );
   }
 
-  Widget _buildBalanceCard() {
+  Widget _actionButton(IconData icon, String label, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: color, size: 26),
+          ),
+          const SizedBox(height: 6),
+          Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  Widget _groupCard(BuildContext context, GroupModel g) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => GroupDetailsScreen(group: g)),
+        ).then((_) {
+          context.read<GroupProvider>().fetchGroups();
+          context.read<TransactionProvider>().fetchSummary();
+        }),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: const Color(0xFF1E3A8A).withOpacity(0.1),
+                child: Text(g.name.substring(0, 1).toUpperCase(),
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold, color: const Color(0xFF1E3A8A))),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(g.name, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                    Text('XAF ${NumberFormat('#,##0').format(g.contributionAmt)} • ${g.frequency}',
+                        style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[600])),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: g.status == 'ACTIVE'
+                      ? const Color(0xFF10B981).withOpacity(0.1)
+                      : Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(g.status,
+                    style: GoogleFonts.inter(
+                        color: g.status == 'ACTIVE' ? const Color(0xFF10B981) : Colors.orange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right, color: Colors.grey, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _transactionCard(TransactionModel t, NumberFormat fmt) {
+    final isDebit = t.isDebit;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: isDebit
+              ? const Color(0xFFEF4444).withOpacity(0.1)
+              : const Color(0xFF10B981).withOpacity(0.1),
+          child: Icon(isDebit ? Icons.arrow_upward : Icons.arrow_downward,
+              color: isDebit ? const Color(0xFFEF4444) : const Color(0xFF10B981)),
+        ),
+        title: Text(t.group?['name'] ?? t.type,
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+        subtitle: Text(DateFormat('MMM d, h:mm a').format(t.createdAt),
+            style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[500])),
+        trailing: Text('${isDebit ? '-' : '+'}XAF ${fmt.format(t.amount)}',
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: isDebit ? const Color(0xFFEF4444) : const Color(0xFF10B981))),
+      ),
+    );
+  }
+
+  Widget _emptyState(IconData icon, String title, String subtitle) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1E3A8A).withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.all(32),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Total Savings', style: GoogleFonts.inter(color: Colors.white60, fontSize: 14)),
-          const SizedBox(height: 8),
-          Text(
-            'XAF 250,000',
-            style: GoogleFonts.poppins(fontSize: 34, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              const Icon(Icons.trending_up, color: Color(0xFF34D399), size: 16),
-              const SizedBox(width: 4),
-              Text('+12.5% this month', style: GoogleFonts.inter(color: const Color(0xFF34D399), fontSize: 12)),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const Divider(color: Colors.white24),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildStatItem('Active Groups', '3'),
-              _buildStatItem('Next Payout', '5 days'),
-              _buildStatItem('Trust Score', '98%'),
-            ],
-          ),
+          Icon(icon, size: 48, color: Colors.grey[300]),
+          const SizedBox(height: 12),
+          Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.grey[600])),
+          Text(subtitle, style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[400])),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatItem(String label, String value) {
-    return Column(
-      children: [
-        Text(value, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-        const SizedBox(height: 2),
-        Text(label, style: GoogleFonts.inter(color: Colors.white60, fontSize: 11)),
-      ],
-    );
-  }
-
-  Widget _buildQuickActions(BuildContext context) {
-    final actions = [
-      {'icon': Icons.add_circle_outline, 'label': 'New Group', 'color': const Color(0xFF1E3A8A)},
-      {'icon': Icons.send_outlined, 'label': 'Pay', 'color': const Color(0xFF10B981)},
-      {'icon': Icons.download_outlined, 'label': 'Withdraw', 'color': const Color(0xFFF59E0B)},
-      {'icon': Icons.qr_code_outlined, 'label': 'Scan QR', 'color': const Color(0xFF8B5CF6)},
-    ];
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: actions.map((a) {
-        return Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: (a['color'] as Color).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(a['icon'] as IconData, color: a['color'] as Color, size: 26),
-            ),
-            const SizedBox(height: 6),
-            Text(a['label'] as String, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
-          ],
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(title, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
-        TextButton(onPressed: () {}, child: const Text('See All')),
-      ],
-    );
-  }
-
-  Widget _buildGroupList() {
-    final groups = [
-      {'name': 'Family Savings', 'amount': 'XAF 15,000/month', 'members': 8, 'color': const Color(0xFF1E3A8A)},
-      {'name': 'Office Colleagues', 'amount': 'XAF 10,000/week', 'members': 6, 'color': const Color(0xFF10B981)},
-      {'name': 'Church Group', 'amount': 'XAF 5,000/week', 'members': 12, 'color': const Color(0xFFF59E0B)},
-    ];
-
-    return Column(
-      children: groups.map((g) {
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: CircleAvatar(
-              backgroundColor: (g['color'] as Color).withOpacity(0.15),
-              child: Icon(Icons.group, color: g['color'] as Color),
-            ),
-            title: Text(g['name'] as String, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-            subtitle: Text(g['amount'] as String, style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[600])),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text('Active', style: GoogleFonts.inter(color: const Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.w600)),
-                ),
-                const SizedBox(height: 4),
-                Text('${g['members']} members', style: GoogleFonts.inter(fontSize: 11, color: Colors.grey[500])),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildTransactionList() {
-    final transactions = [
-      {'name': 'Family Savings', 'date': 'Today, 9:00 AM', 'amount': '-XAF 15,000', 'isDebit': true},
-      {'name': 'Payout Received', 'date': 'Yesterday, 2:30 PM', 'amount': '+XAF 120,000', 'isDebit': false},
-      {'name': 'Office Colleagues', 'date': 'Apr 13, 10:00 AM', 'amount': '-XAF 10,000', 'isDebit': true},
-    ];
-
-    return Column(
-      children: transactions.map((t) {
-        final isDebit = t['isDebit'] as bool;
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: CircleAvatar(
-              backgroundColor: isDebit
-                  ? const Color(0xFFEF4444).withOpacity(0.1)
-                  : const Color(0xFF10B981).withOpacity(0.1),
-              child: Icon(
-                isDebit ? Icons.arrow_upward : Icons.arrow_downward,
-                color: isDebit ? const Color(0xFFEF4444) : const Color(0xFF10B981),
-              ),
-            ),
-            title: Text(t['name'] as String, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-            subtitle: Text(t['date'] as String, style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[500])),
-            trailing: Text(
-              t['amount'] as String,
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: isDebit ? const Color(0xFFEF4444) : const Color(0xFF10B981),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 }
 
 // ─── GROUPS TAB ───────────────────────────────────────────────────────────────
 
-class GroupsTab extends StatelessWidget {
+class GroupsTab extends StatefulWidget {
   const GroupsTab({super.key});
 
   @override
+  State<GroupsTab> createState() => _GroupsTabState();
+}
+
+class _GroupsTabState extends State<GroupsTab> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<GroupProvider>().fetchGroups();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final groupProvider = context.watch<GroupProvider>();
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('My Groups', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E3A8A))),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.add),
-              label: const Text('Create New Group'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                backgroundColor: const Color(0xFF1E3A8A),
-              ),
+            Text('My Groups',
+                style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E3A8A))),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.push(
+                        context, MaterialPageRoute(builder: (_) => const CreateGroupScreen()))
+                        .then((_) => context.read<GroupProvider>().fetchGroups()),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E3A8A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.push(
+                        context, MaterialPageRoute(builder: (_) => const JoinGroupScreen()))
+                        .then((_) => context.read<GroupProvider>().fetchGroups()),
+                    icon: const Icon(Icons.vpn_key_outlined),
+                    label: const Text('Join'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.group_add_outlined, size: 64, color: Colors.grey[300]),
-                    const SizedBox(height: 16),
-                    Text('Groups screen coming soon', style: GoogleFonts.inter(color: Colors.grey[500])),
-                  ],
-                ),
-              ),
+              child: groupProvider.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : groupProvider.groups.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.group_add_outlined, size: 64, color: Colors.grey[300]),
+                              const SizedBox(height: 16),
+                              Text('No groups yet',
+                                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.grey[600])),
+                              Text('Create your first Njangi group',
+                                  style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400])),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () => context.read<GroupProvider>().fetchGroups(),
+                          child: ListView.builder(
+                            itemCount: groupProvider.groups.length,
+                            itemBuilder: (context, index) {
+                              final g = groupProvider.groups[index];
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => GroupDetailsScreen(group: g)),
+                                  ).then((_) => context.read<GroupProvider>().fetchGroups()),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 24,
+                                          backgroundColor: const Color(0xFF1E3A8A).withOpacity(0.1),
+                                          child: Text(g.name.substring(0, 1).toUpperCase(),
+                                              style: GoogleFonts.poppins(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(0xFF1E3A8A),
+                                                  fontSize: 18)),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(g.name,
+                                                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15)),
+                                              const SizedBox(height: 2),
+                                              Text('XAF ${NumberFormat('#,##0').format(g.contributionAmt)} • ${g.frequency}',
+                                                  style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[600])),
+                                              Text('${g.memberCount ?? 0}/${g.maxMembers} members • ${g.inviteCode}',
+                                                  style: GoogleFonts.inter(fontSize: 11, color: Colors.grey[400])),
+                                            ],
+                                          ),
+                                        ),
+                                        Column(
+                                          children: [
+                                            Chip(
+                                              label: Text(g.status,
+                                                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600)),
+                                              backgroundColor: g.status == 'ACTIVE'
+                                                  ? const Color(0xFF10B981).withOpacity(0.15)
+                                                  : Colors.orange.withOpacity(0.15),
+                                              labelStyle: TextStyle(
+                                                  color: g.status == 'ACTIVE'
+                                                      ? const Color(0xFF10B981)
+                                                      : Colors.orange),
+                                              padding: EdgeInsets.zero,
+                                            ),
+                                            if (g.myRole == 'ADMIN')
+                                              Text('Admin',
+                                                  style: GoogleFonts.inter(
+                                                      fontSize: 10,
+                                                      color: const Color(0xFF1E3A8A),
+                                                      fontWeight: FontWeight.w600)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
             ),
           ],
         ),
@@ -339,30 +499,81 @@ class GroupsTab extends StatelessWidget {
 
 // ─── TRANSACTIONS TAB ─────────────────────────────────────────────────────────
 
-class TransactionsTab extends StatelessWidget {
+class TransactionsTab extends StatefulWidget {
   const TransactionsTab({super.key});
 
   @override
+  State<TransactionsTab> createState() => _TransactionsTabState();
+}
+
+class _TransactionsTabState extends State<TransactionsTab> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<TransactionProvider>().fetchTransactions();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final provider = context.watch<TransactionProvider>();
+    final fmt = NumberFormat('#,##0', 'en_US');
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Transaction History', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E3A8A))),
-            const SizedBox(height: 20),
+            Text('Transaction History',
+                style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E3A8A))),
+            const SizedBox(height: 16),
             Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey[300]),
-                    const SizedBox(height: 16),
-                    Text('Full history coming soon', style: GoogleFonts.inter(color: Colors.grey[500])),
-                  ],
-                ),
-              ),
+              child: provider.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : provider.transactions.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey[300]),
+                              const SizedBox(height: 16),
+                              Text('No transactions yet', style: GoogleFonts.poppins(color: Colors.grey[600])),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () => context.read<TransactionProvider>().fetchTransactions(),
+                          child: ListView.builder(
+                            itemCount: provider.transactions.length,
+                            itemBuilder: (context, index) {
+                              final t = provider.transactions[index];
+                              final isDebit = t.isDebit;
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: isDebit
+                                        ? const Color(0xFFEF4444).withOpacity(0.1)
+                                        : const Color(0xFF10B981).withOpacity(0.1),
+                                    child: Icon(isDebit ? Icons.arrow_upward : Icons.arrow_downward,
+                                        color: isDebit ? const Color(0xFFEF4444) : const Color(0xFF10B981)),
+                                  ),
+                                  title: Text(t.group?['name'] ?? t.type,
+                                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                                  subtitle: Text(DateFormat('MMM d, yyyy • h:mm a').format(t.createdAt),
+                                      style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[500])),
+                                  trailing: Text('${isDebit ? '-' : '+'}XAF ${fmt.format(t.amount)}',
+                                      style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: isDebit ? const Color(0xFFEF4444) : const Color(0xFF10B981))),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
             ),
           ],
         ),
@@ -376,20 +587,10 @@ class TransactionsTab extends StatelessWidget {
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
 
-  Future<void> _logout(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isLoggedIn', false);
-    if (context.mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (_) => false,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -399,40 +600,51 @@ class ProfileTab extends StatelessWidget {
             CircleAvatar(
               radius: 50,
               backgroundColor: const Color(0xFF1E3A8A),
-              child: const Icon(Icons.person, size: 50, color: Colors.white),
+              child: Text(user?.fullName.substring(0, 1).toUpperCase() ?? 'U',
+                  style: GoogleFonts.poppins(fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 16),
-            Text('John Doe', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold)),
-            Text('john.doe@email.com', style: GoogleFonts.inter(color: Colors.grey[600])),
-            const SizedBox(height: 8),
+            Text(user?.fullName ?? '',
+                style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(user?.email ?? '', style: GoogleFonts.inter(color: Colors.grey[600])),
+            Text(user?.phone ?? '', style: GoogleFonts.inter(color: Colors.grey[500], fontSize: 13)),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFF10B981).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text('Trust Score: 98%', style: GoogleFonts.inter(color: const Color(0xFF10B981), fontWeight: FontWeight.w600)),
+              child: Text('Trust Score: ${user?.trustScore ?? 100}%',
+                  style: GoogleFonts.inter(color: const Color(0xFF10B981), fontWeight: FontWeight.w600)),
             ),
             const SizedBox(height: 32),
-            _buildProfileOption(Icons.notifications_outlined, 'Notifications', () {}),
-            _buildProfileOption(Icons.security_outlined, 'Security', () {}),
-            _buildProfileOption(Icons.help_outline, 'Help & Support', () {}),
-            _buildProfileOption(Icons.info_outline, 'About NjangiPay', () {}),
+            _option(Icons.notifications_outlined, 'Notifications', () {}),
+            _option(Icons.security_outlined, 'Security', () {}),
+            _option(Icons.help_outline, 'Help & Support', () {}),
+            _option(Icons.info_outline, 'About NjangiPay', () {}),
             const SizedBox(height: 8),
-            _buildProfileOption(Icons.logout, 'Logout', () => _logout(context), isDestructive: true),
+            _option(Icons.logout, 'Logout', () async {
+              await context.read<AuthProvider>().logout();
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
+              }
+            }, isDestructive: true),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildProfileOption(IconData icon, String label, VoidCallback onTap, {bool isDestructive = false}) {
+  Widget _option(IconData icon, String label, VoidCallback onTap, {bool isDestructive = false}) {
     final color = isDestructive ? const Color(0xFFEF4444) : const Color(0xFF1E3A8A);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         leading: Icon(icon, color: color),
-        title: Text(label, style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: isDestructive ? color : null)),
+        title: Text(label,
+            style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: isDestructive ? color : null)),
         trailing: isDestructive ? null : const Icon(Icons.chevron_right, color: Colors.grey),
         onTap: onTap,
       ),
