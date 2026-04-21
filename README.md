@@ -48,7 +48,7 @@ For the tech-curious, here is what powers NjangiSafe:
 ---
 
 ## 🎓 About the Project
-NjangiSafe was developed by **Aldo** as a core project for the **Android Application Development** course at **The ICT University, Cameroon**. It represents a bridge between ancestral African traditions and modern software engineering.
+NjangiSafe was developed by **Leina** and **Aldo** as a core project for the **Android Application Development** course at **The ICT University, Cameroon**. It represents a bridge between ancestral African traditions and modern software engineering.
 
 --- 
 **Purpose:** Academic Innovation & Financial Inclusion
