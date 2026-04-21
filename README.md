@@ -1,4 +1,4 @@
-# 🛡️ NjangiSafe
+# 🛡️ NjangiPay
 **Digitalizing Trust in Cameroonian Tontines.**
 
 ## 🌟 What is NjangiSafe?
